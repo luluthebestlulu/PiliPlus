@@ -1,0 +1,65 @@
+name: Build for Linux arm64 (deb)
+
+# 在原生 ARM64 runner 上构建 PiliPlus 的 Linux arm64 安装包。
+# GitHub 公共仓库可免费使用 ubuntu-24.04-arm 托管 runner；
+# 私有仓库若无 ARM64 托管 runner，可把 runs-on 改为自建机器标签，例如：
+#   runs-on: [self-hosted, linux, arm64]
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "上传到指定 Release 的 tag（留空则只产出 artifact）"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  build-linux-arm64-deb:
+    name: Release Linux arm64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # 版本号来自 git rev-list --count HEAD
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libasound2-dev libmpv-dev \
+            libblkid-dev liblzma-dev dpkg-dev file
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: false   # SDK 会被打补丁，不能复用缓存
+
+      - name: Show toolchain
+        run: |
+          uname -m
+          flutter --version
+
+      - name: Build and package deb
+        run: bash scripts/build_deb_arm64.sh
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          name: Linux_deb_arm64_package
+          path: dist/PiliPlus_linux_*_arm64.deb
+          if-no-files-found: error
+
+      - name: Release
+        if: ${{ github.event.inputs.tag != '' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.tag }}
+          files: dist/PiliPlus_linux_*_arm64.deb
